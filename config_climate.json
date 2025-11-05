@@ -1,0 +1,105 @@
+{
+  "description": "DHT22 \u2192 ML Model \u2192 LLM \u2192 OLED + Servo Pipeline",
+  "pipelines": {
+    "climate_control_pipeline": {
+      "pipeline": [
+        {
+          "type": "hardware_sensor",
+          "name": "climate_sensor",
+          "esp32_url": "http://192.168.1.100",
+          "sensor_type": "DHT22",
+          "endpoint": "/sensor/dht22/read"
+        },
+        {
+          "type": "pickle_model",
+          "name": "climate_classifier",
+          "model_path": "models/climate_classifier.pkl",
+          "input_keys": [
+            "temperature",
+            "humidity"
+          ],
+          "output_key": "climate_class"
+        },
+        {
+          "type": "openapi_llm",
+          "name": "summary_generator",
+          "api_base": "https://generativelanguage.googleapis.com/v1beta/openai",
+          "api_key": "YOUR_GEMINI_KEY",
+          "model": "gemini-2.0-flash-exp",
+          "system_prompt": "Given climate classification (0=Not Hot, 1=Hot, 2=Hot and Humid) and temperature/humidity data, provide exactly 1 short sentence describing the conditions.",
+          "temperature": 0.5,
+          "max_tokens": 50
+        },
+        {
+          "type": "custom_endpoint",
+          "name": "display_climate",
+          "esp32_url": "http://192.168.1.100",
+          "endpoint": "/custom/displayClimate",
+          "method": "POST",
+          "param_keys": [
+            "climate_class",
+            "summary_generator_output",
+            "temperature",
+            "humidity"
+          ]
+        }
+      ]
+    }
+  },
+  "hardware": {
+    "wifi": {
+      "ssid": "YOUR_WIFI_SSID",
+      "password": "YOUR_WIFI_PASSWORD",
+      "port": 80
+    },
+    "sensors": [
+      {
+        "name": "dht22",
+        "type": "DHT22",
+        "pins": {
+          "data": 4
+        },
+        "periodic_monitoring": {
+          "enabled": true,
+          "mode": "interval",
+          "interval_ms": 10000,
+          "trigger_pipeline": "climate_control_pipeline",
+          "trigger_pipeline_url": "http://YOUR_SERVER:5000/api/trigger/climate_control_pipeline"
+        }
+      }
+    ],
+    "actuators": [
+      {
+        "name": "display",
+        "type": "SH1106",
+        "pins": {
+          "sda": 21,
+          "scl": 22
+        }
+      },
+      {
+        "name": "servo",
+        "type": "SG90",
+        "pins": {
+          "control": 13
+        }
+      }
+    ],
+    "custom_endpoints": [
+      {
+        "name": "displayClimate",
+        "path": "/custom/displayClimate",
+        "method": "POST",
+        "description": "Display climate info on OLED with appropriate icon and control servo",
+        "template_file": "hardware_interfaces/displayClimate.cpp"
+      },
+      {
+        "name": "showSmileExpression",
+        "path": "/custom/smile",
+        "method": "GET",
+        "description": "Show smiley face on display",
+        "template_file": "hardware_interfaces/showSmileExpression.cpp"
+      }
+    ]
+  }
+}
